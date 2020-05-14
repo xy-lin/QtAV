@@ -1,6 +1,6 @@
 /******************************************************************************
     QtAV:  Multimedia framework based on Qt and FFmpeg
-    Copyright (C) 2012-2016 Wang Bin <wbsecg1@gmail.com>
+    Copyright (C) 2012-2017 Wang Bin <wbsecg1@gmail.com>
 
 *   This file is part of QtAV
 
@@ -243,7 +243,7 @@ void VideoThread::run()
     DPTR_D(VideoThread);
     if (!d.dec || !d.dec->isAvailable() || !d.outputSet)
         return;
-    resetState();
+    // resetState(); // we can't reset the thread state from here
     if (d.capture->autoSave()) {
         d.capture->setCaptureName(QFileInfo(d.statistics->url).completeBaseName());
     }
@@ -320,7 +320,7 @@ void VideoThread::run()
             if (!pkt.isValid()) {
                 // may be we should check other information. invalid packet can come from
                 wait_key_frame = true;
-                qDebug("Invalid packet! flush video codec context!!!!!!!!!! video packet queue size: %d", d.packets.size());  
+                qDebug("Invalid packet! flush video codec context!!!!!!!!!! video packet queue size: %d", d.packets.size());
                 d.dec->flush(); //d.dec instead of dec because d.dec maybe changed in processNextTask() but dec is not
                 d.render_pts0 = pkt.pts;
                 sync_id = pkt.position;
@@ -488,7 +488,7 @@ void VideoThread::run()
             dec->setOptions(*dec_opt);
         if (!dec->decode(pkt)) {
             d.pts_history.push_back(d.pts_history.back());
-            qWarning("Decode video failed. undecoded: %d/%d", dec->undecodedSize(), pkt.data.size());
+            //qWarning("Decode video failed. undecoded: %d/%d", dec->undecodedSize(), pkt.data.size());
             if (pkt.isEOF()) {
                 Q_EMIT eofDecoded();
                 qDebug("video decode eof done. d.render_pts0: %.3f", d.render_pts0);
@@ -506,7 +506,6 @@ void VideoThread::run()
                     break;
             }
             pkt = Packet();
-            v_a = 0; //?
             continue;
         }
         // reduce here to ensure to decode the rest data in the next loop
@@ -519,11 +518,10 @@ void VideoThread::run()
                 pkt = Packet();
             else
                 pkt_data = pkt.data.constData();
-            v_a = 0; //?
             continue;
         }
         pkt_data = pkt.data.constData();
-        if (frame.timestamp() <= 0)
+        if (frame.timestamp() < 0)
             frame.setTimestamp(pkt.pts); // pkt.pts is wrong. >= real timestamp
         const qreal pts = frame.timestamp();
         d.pts_history.push_back(pts);

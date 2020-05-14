@@ -111,6 +111,8 @@ AVPlayer::Private::Private()
     , status(NoMedia)
     , state(AVPlayer::StoppedState)
     , end_action(MediaEndAction_Default)
+    , last_known_good_pts(0)
+    , was_stepping(false)
 {
     demuxer.setInterruptTimeout(interrupt_timeout);
     /*
@@ -273,7 +275,9 @@ void AVPlayer::Private::initCommonStatistics(int s, Statistics::Common *st, AVCo
 #if (defined FF_API_R_FRAME_RATE && FF_API_R_FRAME_RATE) //removed in libav10
     //FIXME: which 1 should we choose? avg_frame_rate may be nan, r_frame_rate may be wrong(guessed value)
     else if (stream->r_frame_rate.den && stream->r_frame_rate.num) {
-        st->frame_rate = av_q2d(stream->r_frame_rate);
+        if (stream->r_frame_rate.num < 90000)
+            st->frame_rate = av_q2d(stream->r_frame_rate);
+
         qDebug("%d/%d", stream->r_frame_rate.num, stream->r_frame_rate.den);
     }
 #endif //FF_API_R_FRAME_RATE
@@ -428,6 +432,10 @@ bool AVPlayer::Private::setupAudioThread(AVPlayer *player)
             }
         }
     }
+
+    // we set the thre state before the thread start,
+    // as it maybe clear after by AVDemuxThread starting
+    athread->resetState();
     athread->setDecoder(adec);
     setAVOutput(ao, ao, athread);
     updateBufferValue(athread->packetQueue());
@@ -605,6 +613,10 @@ bool AVPlayer::Private::setupVideoThread(AVPlayer *player)
         }
         QObject::connect(vthread, SIGNAL(finished()), player, SLOT(tryClearVideoRenderers()), Qt::DirectConnection);
     }
+
+    // we set the thre state before the thread start
+    // as it maybe clear after by AVDemuxThread starting
+    vthread->resetState();
     vthread->setDecoder(vdec);
 
     vthread->setBrightness(brightness);

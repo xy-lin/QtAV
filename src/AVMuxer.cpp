@@ -1,6 +1,6 @@
 /******************************************************************************
     QtAV:  Multimedia framework based on Qt and FFmpeg
-    Copyright (C) 2012-2016 Wang Bin <wbsecg1@gmail.com>
+    Copyright (C) 2012-2018 Wang Bin <wbsecg1@gmail.com>
 
 *   This file is part of QtAV (from 2015)
 
@@ -51,7 +51,9 @@ public:
         , aenc(0)
         , venc(0)
     {
+#if !AVFORMAT_STATIC_REGISTER
         av_register_all();
+#endif
     }
     ~Private() {
         //delete interrupt_hanlder;
@@ -124,7 +126,7 @@ AVStream *AVMuxer::Private::addStream(AVFormatContext* ctx, const QString &codec
     c->time_base = s->time_base;
     /* Some formats want stream headers to be separate. */
     if (ctx->oformat->flags & AVFMT_GLOBALHEADER)
-        c->flags |= CODEC_FLAG_GLOBAL_HEADER;
+        c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     // expose avctx to encoder and set properties in encoder?
     // list codecs for a given format in ui
     return s;
@@ -186,10 +188,16 @@ static void getFFmpegOutputFormats(QStringList* formats, QStringList* extensions
     static QStringList exts;
     static QStringList fmts;
     if (exts.isEmpty() && fmts.isEmpty()) {
+        QStringList e, f;
+#if AVFORMAT_STATIC_REGISTER
+        const AVOutputFormat *o = NULL;
+        void* it = NULL;
+        while ((o = av_muxer_iterate(&it))) {
+#else
         av_register_all(); // MUST register all input/output formats
         AVOutputFormat *o = NULL;
-        QStringList e, f;
         while ((o = av_oformat_next(o))) {
+#endif
             if (o->extensions)
                 e << QString::fromLatin1(o->extensions).split(QLatin1Char(','), QString::SkipEmptyParts);
             if (o->name)
@@ -239,7 +247,9 @@ const QStringList &AVMuxer::supportedProtocols()
 #if QTAV_HAVE(AVDEVICE)
     protocols << QStringLiteral("avdevice");
 #endif
+#if !AVFORMAT_STATIC_REGISTER
     av_register_all(); // MUST register all input/output formats
+#endif
     void* opq = 0;
     const char* protocol = avio_enum_protocols(&opq, 1);
     while (protocol) {
